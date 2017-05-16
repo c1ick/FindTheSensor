@@ -1,25 +1,16 @@
 package com.example.findthesensor;
 
 import android.app.Activity;
-import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothServerSocket;
-import android.bluetooth.BluetoothSocket;
-import android.content.BroadcastReceiver;
+import android.app.ProgressDialog;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
-import android.net.Uri;
-import android.nfc.Tag;
+import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.Environment;
 import android.util.Log;
+import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -32,17 +23,12 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.net.URL;
+import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
-import java.util.UUID;
-import java.util.logging.Handler;
-
-import static java.lang.Thread.sleep;
 
 public class MainActivity extends Activity implements SensorEventListener {
 //implements SensorEventListener
@@ -65,13 +51,6 @@ public class MainActivity extends Activity implements SensorEventListener {
     Float PRO_value;
     Float LIG_value;
 
-    // 블루투스
-    /*
-    UUID SPP_UUID = java.util.UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
-    //블루투스 Adapter를 가져온다
-    BluetoothAdapter mBlueToothAdapter = BluetoothAdapter.getDefaultAdapter();
-    */
-
     // 파일을 저장하기 위한 Thread (1초에 한번씩)
     private class fileSaveThread extends Thread {
         private static final String TAG = "fileSaveThread";
@@ -86,16 +65,39 @@ public class MainActivity extends Activity implements SensorEventListener {
 
             while (true) {
                 second++;
-                //onReceive();
                 try {
                     makeFile();
                     fileIndex++;
-                    Thread.sleep(1000); // 1초간 Thread를 잠재운다
+                    Thread.sleep(1000); // 2초간 Thread를 잠재운다
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                     ;
                 }
-                Log.i("경과된 시간 : ", Integer.toString(second));
+                //Log.i("경과된 시간 : ", Integer.toString(second));
+            }
+        }
+    }
+
+    private class fileSendThread extends Thread {
+        private static final String TAG = "fileSendThread";
+
+        public fileSendThread() {
+            // 초기화 작업
+        }
+
+        public void run() {
+
+            int second = 0;
+
+            while (true) {
+                second++;
+                try {
+                    insert();
+                    Thread.sleep(5000); // 5초간 Thread를 잠재운다
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                //Log.i("파일 업로드 시간 : ", Integer.toString(second));
             }
         }
     }
@@ -127,70 +129,73 @@ public class MainActivity extends Activity implements SensorEventListener {
         Thread fileSavet = new fileSaveThread();
         fileSavet.start();
 
+        Thread fileSendt = new fileSendThread();
+        fileSendt.start();
+
     } // End of OnCreate
 
 
-        //센서에 대한 딜레이 설정. 이걸 해 줘야 리스너값을 받아오기 위함.
-        @Override
-        protected void onResume() {
-            super.onResume();
+    //센서에 대한 딜레이 설정. 이걸 해 줘야 리스너값을 받아오기 위함.
+    @Override
+    protected void onResume() {
+        super.onResume();
 
 
-            for(int i=0; i<sizeOfList; i++)
-            {
-                sm.registerListener(this, existSensor.get(i),  SensorManager.SENSOR_DELAY_NORMAL);
-            }
-
+        for(int i=0; i<sizeOfList; i++)
+        {
+            sm.registerListener(this, existSensor.get(i),  SensorManager.SENSOR_DELAY_NORMAL);
         }
 
+    }
 
-        @Override
-        public void onSensorChanged(SensorEvent event) {
 
-            //여기서 센서값이 변하는걸 체크한다. 현재 GYROSCOPE,ACCELEROMETER,LIGHT,PROXIMITY 값 등 일부의 값을 받아온다.
-            // 나중에 step이라든지 추가하면 됨..
+    @Override
+    public void onSensorChanged(SensorEvent event) {
 
-            switch (event.sensor.getType()) {
-                case Sensor.TYPE_GYROSCOPE:
-                    //Log.d("tag", "TYPE_GYROSCOPE: X"+event.values[0]+"Y " + event.values[1] + "Z " + event.values[2]);
-                    GYP_value[0] = event.values[0];
-                    GYP_value[1] = event.values[1];
-                    GYP_value[2] = event.values[2];
-                    break;
-                case Sensor.TYPE_ACCELEROMETER:
-                    //Log.d("tag", "TYPE_ACCELEROMETER: X"+event.values[0]+"Y " + event.values[1] + "Z " + event.values[2]);
-                    ACC_value[0] = event.values[0];
-                    ACC_value[1] = event.values[1];
-                    ACC_value[2] = event.values[2];
-                    break;
-                case Sensor.TYPE_MAGNETIC_FIELD:
-                    //Log.d("tag", "TYPE_MAGNETIC_FILED: X"+event.values[0]+" Y " + event.values[1] + " Z " + event.values[2]);
-                    MAG_value[0] = event.values[0];
-                    MAG_value[1] = event.values[1];
-                    MAG_value[2] = event.values[2];
-                    break;
-                case Sensor.TYPE_PROXIMITY:
-                    Log.d("tag", "TYPE_PROXIMITY: "+ event.values[0]);
-                    PRO_value = event.values[0];
-                    break;
-                case Sensor.TYPE_LIGHT:
-                    //Log.d("tag", "TYPE_LIGHT: "+event.values[0]);
-                    LIG_value = event.values[0];
-                    break;
-                case Sensor.TYPE_ORIENTATION:
-                    Log.d("tag", "TYPE_ORIENTATION: X"+event.values[0]+"Y " + event.values[1] + "Z " + event.values[2]);
-                    ORI_value[0] = event.values[0];
-                    ORI_value[1] = event.values[1];
-                    ORI_value[2] = event.values[2];
-                    break;
+        //여기서 센서값이 변하는걸 체크한다. 현재 GYROSCOPE,ACCELEROMETER,LIGHT,PROXIMITY 값 등 일부의 값을 받아온다.
+        // 나중에 step이라든지 추가하면 됨..
+
+        switch (event.sensor.getType()) {
+            case Sensor.TYPE_GYROSCOPE:
+                //Log.d("tag", "TYPE_GYROSCOPE: X"+event.values[0]+"Y " + event.values[1] + "Z " + event.values[2]);
+                GYP_value[0] = event.values[0];
+                GYP_value[1] = event.values[1];
+                GYP_value[2] = event.values[2];
+                break;
+            case Sensor.TYPE_ACCELEROMETER:
+                //Log.d("tag", "TYPE_ACCELEROMETER: X"+event.values[0]+"Y " + event.values[1] + "Z " + event.values[2]);
+                ACC_value[0] = event.values[0];
+                ACC_value[1] = event.values[1];
+                ACC_value[2] = event.values[2];
+                break;
+            case Sensor.TYPE_MAGNETIC_FIELD:
+                //Log.d("tag", "TYPE_MAGNETIC_FILED: X"+event.values[0]+" Y " + event.values[1] + " Z " + event.values[2]);
+                MAG_value[0] = event.values[0];
+                MAG_value[1] = event.values[1];
+                MAG_value[2] = event.values[2];
+                break;
+            case Sensor.TYPE_PROXIMITY:
+                //Log.d("tag", "TYPE_PROXIMITY: "+ event.values[0]);
+                PRO_value = event.values[0];
+                break;
+            case Sensor.TYPE_LIGHT:
+                //Log.d("tag", "TYPE_LIGHT: "+event.values[0]);
+                LIG_value = event.values[0];
+                break;
+            case Sensor.TYPE_ORIENTATION:
+                //Log.d("tag", "TYPE_ORIENTATION: X"+event.values[0]+"Y " + event.values[1] + "Z " + event.values[2]);
+                ORI_value[0] = event.values[0];
+                ORI_value[1] = event.values[1];
+                ORI_value[2] = event.values[2];
+                break;
 //등등으로 쭉 나간다.
-            }
-
         }
+
+    }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
-    //정확도 변경시 사용된다는것 같은데 정확한 용도는 잘 모르겠다. 사용되는건 한번도 못 본듯 하다.
+        //정확도 변경시 사용된다는것 같은데 정확한 용도는 잘 모르겠다. 사용되는건 한번도 못 본듯 하다.
     }
 
 
@@ -199,8 +204,9 @@ public class MainActivity extends Activity implements SensorEventListener {
     public void makeFile(){
 
         String dirPath = getFilesDir().getAbsolutePath();
-        Log.d("Directory Path : ", dirPath);
-        File folder = new File(dirPath);
+        String addPath = dirPath+"/example2";
+        Log.d("Directory Path : ", addPath);
+        File folder = new File(addPath);
 
         if( !folder.exists() ) {
             folder.mkdirs();
@@ -212,27 +218,33 @@ public class MainActivity extends Activity implements SensorEventListener {
             ACCValue.add(ACC_value[0]);
             ACCValue.add(ACC_value[1]);
             ACCValue.add(ACC_value[2]);
-            obj.put("TYPE_ACCELEROMETER", new JSONArray(ACCValue));
+            //obj.put("TYPE_ACCELEROMETER", new JSONArray(ACCValue));
 
             ArrayList<Float> LIGValue = new ArrayList<Float>();
             LIGValue.add(LIG_value);
-            obj.put("TYPE_LIGHT", new JSONArray(LIGValue));
+           // obj.put("TYPE_LIGHT", new JSONArray(LIGValue));
 
             ArrayList<Float> GYPValue = new ArrayList<Float>();
             GYPValue.add(GYP_value[0]);
             GYPValue.add(GYP_value[1]);
             GYPValue.add(GYP_value[2]);
-            obj.put("TYPE_GYROSCOPE", new JSONArray(GYPValue));
+            //obj.put("TYPE_GYROSCOPE", new JSONArray(GYPValue));
 
             ArrayList<Float> PROVaule = new ArrayList<Float>();
             PROVaule.add(PRO_value);
-            obj.put("TYPE_PROXIMITY", new JSONArray(PROVaule));
+           // obj.put("TYPE_PROXIMITY", new JSONArray(PROVaule));
 
             ArrayList<Float> ORIValue = new ArrayList<Float>();
             ORIValue.add(ORI_value[0]);
             ORIValue.add(ORI_value[1]);
             ORIValue.add(ORI_value[2]);
-            obj.put("TYPE_ORIENTATION", new JSONArray(ORIValue));
+           // obj.put("TYPE_ORIENTATION", new JSONArray(ORIValue));
+
+            ArrayList<Float> exampleValue = new ArrayList<Float>();
+            exampleValue.add(ACC_value[0]);
+            exampleValue.add(ACC_value[1]);
+            exampleValue.add(ACC_value[2]);
+            obj.put("sensor", new JSONArray(exampleValue));
 
         }
         catch (JSONException e) {
@@ -242,7 +254,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 
         try {
             //임의의 장소에 저장.
-            File savefile = new File(dirPath+"/Sensor"+fileIndex+".txt");
+            File savefile = new File(addPath+"/"+fileIndex+".txt");
             FileWriter file = new FileWriter(savefile);
             file.write(obj.toString());
             file.flush();
@@ -252,130 +264,75 @@ public class MainActivity extends Activity implements SensorEventListener {
             e.printStackTrace();
         }
 
-
-        if (folder.listFiles().length > 0 )
-            for ( File f : folder.listFiles() ) {
-                String str = f.getName();
-
-                // 파일 내용 읽어오기
-                String loadPath = dirPath+"/"+str;
-                try {
-                    FileInputStream fis = new FileInputStream(loadPath);
-                    BufferedReader bufferReader = new BufferedReader(new InputStreamReader(fis));
-
-                    String content="", temp="";
-                    while( (temp = bufferReader.readLine()) != null ) {
-                        content += temp;
-                    }
-                    Log.d("MeSSAGE : ", content);
-                } catch (Exception e) {}
-            }
+        //파일 읽어오는 부분//
 
     }
 
+    //insert 시작
 
-    /*
-        Start Bluetooth Communication
+    public void insert(){
+
+        try{
+
+            String dirPath = getFilesDir().getAbsolutePath();
+            String addPath = dirPath+"/example2";
+            File folder = new File(addPath);
+
+            String link= "http://13.124.80.88:8080/insert";
+
+            if (folder.listFiles().length > 0 ) {
+                Log.d("tag", "How Many Files there? " + folder.listFiles().length);
+                for (File f : folder.listFiles()) {
+                    String str = f.getName();
+
+                    // 파일 내용 읽어오기
+                    String loadPath = addPath + "/" + str;
+                    try {
+                        FileInputStream fis = new FileInputStream(loadPath);
+                        BufferedReader bufferReader = new BufferedReader(new InputStreamReader(fis));
+
+                        String content = "", temp = "";
+                        while ((temp = bufferReader.readLine()) != null) {
+                            content += temp;
+                        }
+
+                        Log.d("tag", "contents content " + content);
+
+                        String data = content;
+
+                        URL url = new URL(link);
+                        URLConnection conn = url.openConnection();
+
+                        conn.setDoOutput(true);
+                        OutputStreamWriter wr = new OutputStreamWriter(conn.getOutputStream());
+
+                        wr.write(data);
+                        wr.flush();
+
+                        // 저장할때 필요함 삭제 ㄴㄴ여
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+
+                        StringBuilder sb = new StringBuilder();
+                        String line = null;
+
+                        //파일삭제
+                        f.delete();
 
 
-
-    public void onReceive() {
-
-        if(mBlueToothAdapter == null){
-            // 만약 블루투스 adapter가 없으면, 블루투스를 지원하지 않는 기기이거나 블루투스 기능을 끈 기기이다.
-        }else{
-            // 블루투스 adapter가 있으면, 블루투스 adater에서 페어링된 장치 목록을 불러올 수 있다.
-            Set pairDevices = mBlueToothAdapter.getBondedDevices();
-
-            //페어링된 장치가 있으면
-            if(pairDevices.size()>0){
-
-            }else{
-                Toast.makeText(getApplicationContext(), "no Device", Toast.LENGTH_SHORT).show();
-            }
-        }
-
-        //브로드캐스트리시버를 이용하여 블루투스 장치가 연결이 되고, 끊기는 이벤트를 받아 올 수 있다.
-        BroadcastReceiver bluetoothReceiver =  new BroadcastReceiver(){
-            public void onReceive(Context context, Intent intent) {
-                String action = intent.getAction();
-                //연결된 장치를 intent를 통하여 가져온다.
-                BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-
-                //장치가 연결이 되었으면
-                if (BluetoothDevice.ACTION_ACL_CONNECTED.equals(action)) {
-                    Log.d("TEST", device.getName().toString() +" Device Is Connected!");
-                    sayHelloToDevice(device.getName().toString());
-                    //장치의 연결이 끊기면
-                }else if(BluetoothDevice.ACTION_ACL_DISCONNECTED.equals(action)){
-                    Log.d("TEST", device.getName().toString() +" Device Is DISConnected!");
-
+                    } catch (Exception e) {
+                        Log.d("tag","Exception@@@@@@"+e.getMessage());
+                    }
                 }
             }
-        };
 
-        //MUST unregisterReceiver(bluetoothReceiver) in onDestroy()
-        IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED);
-        registerReceiver(bluetoothReceiver, filter);
-        filter = new IntentFilter(BluetoothDevice.ACTION_ACL_DISCONNECTED);
-        registerReceiver(bluetoothReceiver, filter);
+
+
+        }
+        catch(Exception e){
+
+        }
 
     }
 
-
-    private void sayHelloToDevice(String deviceName) {
-
-        UUID SPP_UUID = java.util.UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
-        Set<BluetoothDevice> pairedDevices = mBlueToothAdapter.getBondedDevices();
-        BluetoothDevice targetDevice = null;
-
-
-        for(BluetoothDevice pairedDevice : pairedDevices)
-            if(pairedDevice.getName().equals(deviceName)) {
-                targetDevice = pairedDevice;
-                break;
-            }
-
-
-        // If the device was not found, toast an error and return
-        if(targetDevice == null) {
-            Log.d("Device not found","BAD");
-            return;
-        }
-
-        // Create a connection to the device with the SPP UUID
-        BluetoothSocket btSocket = null;
-        try {
-            btSocket = targetDevice.createInsecureRfcommSocketToServiceRecord(SPP_UUID);
-        } catch (IOException e) {
-            Log.d("Unable to open message","BAD");
-            return;
-        }
-
-        // Connect to the device
-        try {
-            btSocket.connect();
-        } catch (IOException e) {
-            Log.d("Unable to Connect","BAD");
-            return;
-        }
-
-        try {
-            OutputStreamWriter writer = new OutputStreamWriter(btSocket.getOutputStream());
-            writer.write("Hello World!\r\n");
-            Log.d("SUCCESS","GOODJOB"+writer.toString());
-            writer.flush();
-        } catch (IOException e) {
-            Log.d("Unable to send message","BAD");
-        }
-
-        try {
-            btSocket.close();
-            Toast.makeText(this, "Message successfully sent to the device", Toast.LENGTH_SHORT).show();
-        } catch (IOException e) {
-            Toast.makeText(this, "Unable to close the connection to the device", Toast.LENGTH_SHORT).show();
-        }
-    }
-*/
 
 } // end of class
